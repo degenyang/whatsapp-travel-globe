@@ -1,0 +1,14 @@
+# your real data never goes in git
+data/trips.js
+*.db
+*.db-*
+*.crypt*
+*.sqlite
+chats/
+travel/
+out_txt/
+contacts*.csv
+*.vcf
+*.log
+.env
+__pycache__/
