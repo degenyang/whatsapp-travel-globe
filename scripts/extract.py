@@ -34,6 +34,7 @@ me = set(a.me or ["You"])
 line_re = re.compile(
     r"^\[?(\d{1,2})[./-](\d{1,2})[./-](\d{2,4}),? (\d{1,2}):(\d{2})(?::\d{2})?(?:\s?([AaPp])\.?\s?[Mm]\.?)?(?:\] | - )([^:]+?): (.*)$"
 )
+stamp_re = re.compile(r"^\[?\d{1,2}[./-]\d{1,2}[./-]\d{2,4},? \d{1,2}:\d{2}")
 # English travel words. Add words in your own language before the closing ")".
 travel = re.compile(
     r"(landed|just arrived|arrived (at|in)|touch(ed)? ?down|boarding|at (the )?airport|airport (now|already)|"
@@ -54,10 +55,11 @@ def messages(path):
         for ln in f:
             ln = ln.translate(INVISIBLE).replace(" ", " ").replace(" ", " ").rstrip("\r\n")
             m = line_re.match(ln)
-            if m:
+            if m or stamp_re.match(ln):
                 if msg:
                     yield msg
-                msg = list(m.groups()) + [m.group(8)]
+                # a stamped line with no "Sender:" is a system notice ("X left"): it ends the message above
+                msg = list(m.groups()) + [m.group(8)] if m else None
             elif msg and ln.strip():
                 msg[7] += " " + ln.strip()
     if msg:

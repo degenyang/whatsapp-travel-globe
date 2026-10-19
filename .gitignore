@@ -13,3 +13,4 @@ contacts*.csv
 .env
 __pycache__/
 tests/out/
+!tests/fixtures/chats/

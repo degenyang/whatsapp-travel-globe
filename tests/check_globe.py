@@ -32,11 +32,12 @@ def serve():
 
 
 BAD = """window.TRIPS = {title: "bad", homes: {A: "home"}, country: {A: "GB", B: "FR"},
-  places: {A: ["Aville", 51.5, -0.1], B: ["Bville", 48.8, 2.3]},
+  places: {A: ["Aville", 51.5, -0.1], B: ["Bville", 48.8, 2.3], C: ["Cville", 40.4, -3.7]},
   trips: [["2020-01-02", "2020-01-05", "A", ["B"], "ok", "o"],
           ["2020-02-02", "2020-02-05", "A", ["XXX"], "unknown place", "o"],
           ["2020-13-40", "", "A", ["B"], "bad date", "d"],
-          ["2020-03-02", "2020-03-01", "A", ["B"], "ends before start", "o"]]};"""
+          ["2020-03-02", "2020-03-01", "A", ["B"], "ends before start", "o"],
+          ["2020-04-02", "2020-04-05", "A", ["C"], "no country code", "o"]]};"""
 
 
 def wait_ready(page):
@@ -69,6 +70,8 @@ def main():
             want = sorted(page.evaluate("[...new Set(T.flatMap(t=>t.places).map(k=>iso(k)).filter(Boolean))]"))
             got = sorted(page.evaluate("map.getFilter('visited')[2][1]"))
             check("visited-country fill covers every visited country", got == want, f"{len(got)} vs {len(want)}")
+            real = set(page.evaluate("fetch(COUNTRIES_URL).then(r=>r.json()).then(d=>d.features.map(f=>f.properties.ISO_A2_EH))"))
+            check("every visited code exists in the country outlines", set(want) <= real, f"missing {sorted(set(want) - real)}")
             stats = page.inner_text("#stats")
             check("countries stat shows share of the world", "% of 195" in stats, stats.replace("\n", " ")[:120])
             page.wait_for_timeout(2500)
@@ -87,6 +90,10 @@ def main():
             page.wait_for_timeout(300)
             sel = page.evaluate("st.sel")
             check("→ moves to another trip and updates the link", sel not in (None, 3) and page.evaluate("location.hash") == "#trip=" + page.evaluate(f"tripId(T[{sel}])"), f"sel={sel} hash={page.evaluate('location.hash')}")
+            page.click("#years [data-y='2018']")
+            page.wait_for_timeout(300)
+            check("changing a filter clears the selection and the link", page.evaluate("st.sel") is None and page.evaluate("location.hash") == "")
+            page.click("#years [data-y='all']")
             page.keyboard.press("p")
             page.wait_for_timeout(300)
             check("P starts playback", "Stop" in page.inner_text("#play"))
@@ -105,6 +112,23 @@ def main():
             page.screenshot(path=str(OUT / "selected.png"))
         except Exception as e:
             check("7. deep link / keys / timeline", False, type(e).__name__ + " " + str(e).splitlines()[0][:80])
+
+        # 7b. bad links do nothing; the site root forwards and keeps the link
+        for h in ("%", "constructor", "nope"):
+            errs = []
+            pg = ctx.new_page()
+            pg.on("pageerror", lambda e: errs.append(str(e)))
+            pg.goto(url + "#trip=" + h)
+            wait_ready(pg)
+            pg.wait_for_timeout(500)
+            check(f"#trip={h} is ignored without errors", not errs and pg.evaluate("st.sel") is None, "; ".join(errs)[:100])
+            pg.close()
+        pg = ctx.new_page()
+        pg.goto(url.replace("globe.html", "") + "#trip=" + tid)
+        wait_ready(pg)
+        pg.wait_for_timeout(500)
+        check("site root forwards to globe.html and keeps #trip=", pg.url.endswith("globe.html#trip=" + tid) and pg.evaluate("st.sel") == 3, pg.url)
+        pg.close()
 
         # 5. share image
         try:
@@ -131,14 +155,25 @@ def main():
             msg = page.inner_text("#err")
         except Exception:
             msg = ""
-        check("bad data: banner names each problem", all(s in msg for s in ("XXX", "2020-13-40", "ends before")), msg.replace("\n", " ")[:160])
+        check("bad data: banner names each problem", all(s in msg for s in ("XXX", "2020-13-40", "ends before", '"C" has no country code')), msg.replace("\n", " ")[:160])
         try:
             wait_ready(page)
             good = page.inner_text("#stats .stat b")
         except Exception:
             good = "?"
-        check("bad data: page still renders the valid trip", not errors and good == "1", f"trips={good} errors={'; '.join(errors)[:120]}")
+        check("bad data: page still renders the valid trips", not errors and good == "2", f"trips={good} errors={'; '.join(errors)[:120]}")
         page.screenshot(path=str(OUT / "bad_data.png"))
+
+        # phone width: nothing sticks out sideways
+        m = browser.new_context(viewport={"width": 390, "height": 844}, is_mobile=True, has_touch=True).new_page()
+        errors = []
+        m.on("pageerror", lambda e: errors.append(str(e)))
+        m.goto(url)
+        wait_ready(m)
+        m.wait_for_timeout(1500)
+        sw = m.evaluate("document.documentElement.scrollWidth")
+        check("phone width: no sideways scroll, no errors", sw <= 390 and not errors, f"scrollWidth={sw}")
+        m.screenshot(path=str(OUT / "mobile.png"))
         browser.close()
     print(f"{sum(results)}/{len(results)} passed")
     sys.exit(0 if all(results) else 1)

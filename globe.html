@@ -91,8 +91,9 @@ Object.entries(TR.places||{}).forEach(([k,v])=>{
   if(Array.isArray(v)&&Number.isFinite(v[1])&&Number.isFinite(v[2])&&Math.abs(v[1])<=90&&Math.abs(v[2])<=180)P[k]=v;
   else PROBLEMS.push(`place "${k}": needs ["Name", latitude, longitude]`);});
 const HOMES=Object.keys(TR.homes||{}).filter(k=>P[k]||!PROBLEMS.push(`home "${k}" is not in places`));
-const T=[],IDS={};
-(TR.trips||[]).forEach((r,n)=>{
+const T=[],IDS=Object.create(null);
+if(TR.trips!=null&&!Array.isArray(TR.trips))PROBLEMS.push('trips must be a list [ … ]');
+(Array.isArray(TR.trips)?TR.trips:[]).forEach((r,n)=>{
   const [start,end,from,stops,note,type]=Array.isArray(r)?r:[],bad=[];
   if(!realDate(start))bad.push(`start "${start}" is not a real YYYY-MM-DD date`);
   if(end&&!realDate(end))bad.push(`end "${end}" is not a real YYYY-MM-DD date`);
@@ -104,9 +105,12 @@ const T=[],IDS={};
   let id=`${start}-${stops[0]}`.toLowerCase();for(let k=2;IDS[id]!=null;k++)id=`${start}-${stops[0]}-${k}`.toLowerCase();
   IDS[id]=T.length;
   T.push({i:T.length,id,start,end,from,places:stops,note:note||'',type,year:+start.slice(0,4)});});
-if(PROBLEMS.length){console.warn('trips.js problems:\n'+PROBLEMS.join('\n'));
+const CTRY_OK=k=>!!(TR.country||{})[k];
+function showProblems(){if(!PROBLEMS.length)return;console.warn('trips.js problems:\n'+PROBLEMS.join('\n'));
   document.getElementById('errl').innerHTML=PROBLEMS.slice(0,12).map(p=>`<li>${esc(p)}</li>`).join('')+(PROBLEMS.length>12?`<li>…and ${PROBLEMS.length-12} more (see the browser console)</li>`:'');
   document.getElementById('err').classList.add('show');}
+[...new Set(T.flatMap(t=>t.places))].filter(k=>!CTRY_OK(k)).forEach(k=>PROBLEMS.push(`place "${k}" has no country code, so its country is not shaded`));
+showProblems();
 const tripId=t=>t.id;
 const YEARS=(()=>{const ys=T.map(t=>t.year);if(!ys.length)return[];const a=[];for(let y=Math.min(...ys);y<=Math.max(...ys);y++)a.push(y);return a;})();
 const CTRY = TR.country||{};
@@ -170,7 +174,7 @@ function render(){
 }
 function stats(by){
   const vis=T.filter(visible),o=vis.filter(t=>t.type==='o').length,cities=Object.keys(by);
-  const codes=new Set(cities.map(iso).filter(Boolean)),countries=new Set(cities.map(k=>iso(k)||k)).size;
+  const codes=new Set(cities.map(iso).filter(Boolean)),countries=codes.size;
   return {trips:vis.length,o,d:vis.length-o,cities:cities.length,countries,codes,pct:Math.round(countries/WORLD*100)};}
 
 // timeline: one bar per trip, positioned by date
@@ -240,8 +244,8 @@ yb.innerHTML=`<button class="chip on" data-y="all">All</button>`+YEARS.map(y=>`<
 yb.addEventListener('click',e=>{const b=e.target.closest('button');if(!b)return;const y=b.dataset.y;
   if(y==='all')st.years=new Set(YEARS);else{const n=+y;if(st.years.size===YEARS.length)st.years=new Set([n]);else st.years.has(n)?st.years.delete(n):st.years.add(n);if(!st.years.size)st.years=new Set(YEARS);}
   yb.querySelectorAll('button').forEach(x=>x.classList.toggle('on',x.dataset.y==='all'?st.years.size===YEARS.length:st.years.has(+x.dataset.y)));
-  stopPlay();st.sel=null;render();});
-document.querySelectorAll('[data-k]').forEach(b=>b.addEventListener('click',()=>{st[b.dataset.k]=!st[b.dataset.k];b.classList.toggle('on',st[b.dataset.k]);stopPlay();st.sel=null;render();}));
+  stopPlay();select(null,false);});
+document.querySelectorAll('[data-k]').forEach(b=>b.addEventListener('click',()=>{st[b.dataset.k]=!st[b.dataset.k];b.classList.toggle('on',st[b.dataset.k]);stopPlay();select(null,false);}));
 document.getElementById('list').addEventListener('click',e=>{const d=e.target.closest('.trip[data-i]');if(!d)return;stopPlay();const i=+d.dataset.i;
   if(st.sel===i){select(null);map.easeTo({pitch:0,zoom:1.9,duration:1200});}else select(i);});
 document.getElementById('proj').onclick=e=>{st.globe=!st.globe;e.target.classList.toggle('on',st.globe);e.target.textContent=st.globe?'🌐 Globe':'🗺️ Flat';map.setProjection({type:st.globe?'globe':'mercator'});};
@@ -260,11 +264,13 @@ pb.onclick=()=>{if(playing){stopPlay();select(null);return;}
   step();};
 
 // links like globe.html#trip=2019-04-05-par open that trip
-function openFromHash(){const m=location.hash.match(/^#trip=(.+)$/),i=m?IDS[decodeURIComponent(m[1]).toLowerCase()]:null;
-  if(i!=null&&i!==st.sel){stopPlay();select(i);}}
+function openFromHash(){const m=location.hash.match(/^#trip=(.+)$/);let i=null;
+  if(m){try{i=IDS[decodeURIComponent(m[1]).toLowerCase()]??null;}catch(e){}}
+  if(i!=null&&!visible(T[i]))i=null;
+  if(i!=null&&i!==st.sel){stopPlay();select(i);}else if(!m&&st.sel!=null){stopPlay();clearSel();}}
 addEventListener('hashchange',openFromHash);
 
-document.getElementById('tl').addEventListener('click',e=>{const b=e.target.closest('.bar');if(!b)return;stopPlay();select(+b.dataset.i);});
+document.getElementById('tl').addEventListener('click',e=>{const b=e.target.closest('.bar:not(.dim)');if(!b)return;stopPlay();select(+b.dataset.i);});
 
 function clearSel(){if(st.sel==null)return;select(null);map.easeTo({pitch:0,zoom:1.9,duration:1200});}
 function stepTrip(d){const q=T.filter(visible);if(!q.length)return;stopPlay();
@@ -280,6 +286,9 @@ document.addEventListener('keydown',e=>{
 document.getElementById('share').onclick=async()=>{
   const W=1080,H=1350,cv=document.createElement('canvas');cv.width=W;cv.height=H;const g=cv.getContext('2d');
   const font='system-ui,-apple-system,"Segoe UI",sans-serif',s=stats(BY);
+  const btn=document.getElementById('share');btn.disabled=true;
+  for(let k=0;k<40&&!(map.areTilesLoaded()&&map.isSourceLoaded('countries')&&!map.isMoving());k++)await new Promise(r=>setTimeout(r,200));
+  btn.disabled=false;
   g.fillStyle=css('--bg');g.fillRect(0,0,W,H);
   await new Promise(res=>{map.once('render',()=>{const mc=map.getCanvas(),top=230,h=860,r=Math.max(W/mc.width,h/mc.height),sw=W/r,sh=h/r;
     g.drawImage(mc,(mc.width-sw)/2,(mc.height-sh)/2,sw,sh,0,top,W,h);res();});map.triggerRepaint();});
