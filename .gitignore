@@ -12,3 +12,4 @@ contacts*.csv
 *.log
 .env
 __pycache__/
+tests/out/
