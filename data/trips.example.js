@@ -31,7 +31,7 @@ window.TRIPS = {
     "BCN": ["Barcelona", 41.3874, 2.1686],
     "DXB": ["Dubai", 25.2048, 55.2708],
   },
-  country: {"LON": "UK", "SYD": "AU", "PAR": "FR", "ROM": "IT", "REK": "IS", "LIS": "PT", "IST": "TR", "RAK": "MA", "CPT": "ZA", "NBO": "KE", "NYC": "US", "MEX": "MX", "RIO": "BR", "LIM": "PE", "TYO": "JP", "BKK": "TH", "DPS": "ID", "AKL": "NZ", "MEL": "AU", "HNL": "US", "QTN": "NZ", "AMS": "NL", "BCN": "ES", "DXB": "AE"},
+  country: {"LON": "GB", "SYD": "AU", "PAR": "FR", "ROM": "IT", "REK": "IS", "LIS": "PT", "IST": "TR", "RAK": "MA", "CPT": "ZA", "NBO": "KE", "NYC": "US", "MEX": "MX", "RIO": "BR", "LIM": "PE", "TYO": "JP", "BKK": "TH", "DPS": "ID", "AKL": "NZ", "MEL": "AU", "HNL": "US", "QTN": "NZ", "AMS": "NL", "BCN": "ES", "DXB": "AE"},
   trips: [
     ["2018-01-19", "2018-01-23", "LON", ["RIO"], "City break", "o"],
     ["2018-01-19", "2018-01-27", "LON", ["LIS", "MEX"], "Family visit", "o"],
